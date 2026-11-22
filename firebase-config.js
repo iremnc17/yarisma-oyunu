@@ -13,14 +13,14 @@ let db = null;
 let isDemoMode = false;
 
 function initFirebase() {
-  if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "AIzaSyCCXIuHcIZLF6UAE_S38H82KjCcCdxuKxM") {
+  if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "BURAYA_API_KEY_YAZIN") {
     console.warn("Firebase yapılandırılmamış! Demo (Yerel Tarayıcı) modu aktif ediliyor.");
     isDemoMode = true;
     return false;
   }
   try {
     if (!firebase.apps.length) {
-      firebase.initializeApp(FIREBASE_CONFIG);
+      firebase.initializeApp(firebaseConfig);
     }
     db = firebase.database();
     return true;

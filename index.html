@@ -196,7 +196,7 @@
 
       <div id="tease-step-2" class="hidden">
         <p style="font-size:0.82rem; color:#475569; margin-bottom:6px;">
-          Dikkat: Arkadaşın arkandaysa o düşer, önündeyse sen düşersin, aynı bloktaysanız etki etmez!
+          İpucu: Aynı bloktaysanız sataşma etki etmez; önünde veya arkasındaysa seçtiğin kişi aşağı düşer!
         </p>
         <div class="target-list" id="tease-targets"></div>
         <button id="btn-tease-cancel" class="btn-no" style="width:100%; margin-top:10px;">Vazgeç</button>
@@ -519,11 +519,7 @@
         }
       });
 
-      if (targetBlock < myBlock) {
-        await updatePlayer(targetPlayer.id, {
-          lastAction: { id: "fall_" + Date.now(), type: "fall" }
-        });
-      } else if (targetBlock === myBlock) {
+      if (targetBlock === myBlock) {
         const banner = document.getElementById("fall-banner");
         banner.style.background = "#475569";
         banner.textContent = "Aynı bloktasınız! Sataşma etki etmedi.";
@@ -533,10 +529,9 @@
           banner.style.background = "#ef4444";
         }, 2000);
       } else {
-        await updatePlayer(myId, {
+        await updatePlayer(targetPlayer.id, {
           lastAction: { id: "fall_" + Date.now(), type: "fall" }
         });
-        triggerFallPenalty(3);
       }
     }
 

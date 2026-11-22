@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Gökyüzü Parkuru - Flutter Yarışması (Oyuncu)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #8ecae6; user-select: none; }
+    #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; }
+
+    .overlay {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(6px);
+      padding: 16px;
+    }
+    .hidden { display: none !important; }
+    .card {
+      background: #ffffff; border-radius: 22px; padding: 22px;
+      width: 100%; max-width: 400px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.25);
+      text-align: center;
+    }
+    h1 { font-size: 1.45rem; color: #0f172a; margin-bottom: 6px; }
+    p.sub { font-size: 0.9rem; color: #64748b; margin-bottom: 16px; }
+
+    .input-group { text-align: left; margin-bottom: 12px; }
+    .input-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 4px; }
+    .input-group input {
+      width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 12px;
+      font-size: 1rem; outline: none; transition: border-color 0.2s;
+    }
+    .input-group input:focus { border-color: #3b82f6; }
+
+    .color-options { display: flex; gap: 10px; justify-content: space-between; margin: 8px 0 18px; }
+    .color-btn {
+      flex: 1; padding: 12px 8px; border-radius: 14px; border: 3px solid transparent;
+      background: #f8fafc; cursor: pointer; display: flex; flex-direction: column;
+      align-items: center; gap: 6px; font-weight: 700; font-size: 0.85rem; color: #1e293b;
+      transition: all 0.2s;
+    }
+    .color-btn .dot { width: 28px; height: 28px; border-radius: 50%; box-shadow: inset 0 -3px 6px rgba(0,0,0,0.25); }
+    .color-btn[data-color="kirmizi"] .dot { background: #ef4444; }
+    .color-btn[data-color="mavi"] .dot { background: #3b82f6; }
+    .color-btn[data-color="yesil"] .dot { background: #22c55e; }
+    .color-btn.selected { border-color: #0f172a; background: #eff6ff; transform: translateY(-2px); }
+
+    .primary-btn {
+      width: 100%; padding: 14px; border: none; border-radius: 14px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff;
+      font-size: 1.05rem; font-weight: 700; cursor: pointer;
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+    }
+    .primary-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    #hud {
+      position: fixed; top: 12px; left: 12px; right: 12px; z-index: 10;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      pointer-events: none;
+    }
+    .hud-pill {
+      background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(6px);
+      padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 0.85rem;
+      color: #0f172a; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    #question-panel {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 15;
+      background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(10px);
+      border-top-left-radius: 24px; border-top-right-radius: 24px;
+      padding: 18px 16px 24px;
+      box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.18);
+      max-width: 540px; margin: 0 auto;
+    }
+    .q-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .q-badge { background: #dbeafe; color: #1d4ed8; font-weight: 800; font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; }
+    .streak-badge { background: #fef3c7; color: #b45309; font-weight: 700; font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; }
+    #q-text { font-size: 0.98rem; font-weight: 700; color: #0f172a; margin-bottom: 12px; line-height: 1.38; }
+    .options-list { display: flex; flex-direction: column; gap: 8px; }
+    .opt-btn {
+      width: 100%; text-align: left; padding: 12px 14px; border-radius: 14px;
+      border: 2px solid #e2e8f0; background: #ffffff; color: #1e293b;
+      font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
+    }
+    .opt-btn:active { transform: scale(0.98); background: #eff6ff; border-color: #3b82f6; }
+    .opt-btn:disabled { opacity: 0.6; }
+
+    #fall-banner {
+      position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 18;
+      background: #ef4444; color: #fff; font-weight: 800; padding: 10px 20px;
+      border-radius: 999px; box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
+      font-size: 0.95rem; white-space: nowrap;
+    }
+
+    .tease-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .btn-yes { flex: 1; padding: 12px; border: none; border-radius: 12px; background: #f59e0b; color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer; }
+    .btn-no { flex: 1; padding: 12px; border: none; border-radius: 12px; background: #e2e8f0; color: #334155; font-weight: 700; font-size: 1rem; cursor: pointer; }
+    .target-list { max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .target-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 11px 14px; border-radius: 12px; border: 2px solid #e2e8f0;
+      background: #f8fafc; font-weight: 700; cursor: pointer;
+    }
+    .target-item:active { background: #fef3c7; border-color: #f59e0b; }
+
+    .podium-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 14px; border-radius: 12px; margin-bottom: 8px; font-weight: 700;
+      background: #f8fafc; border: 1px solid #e2e8f0;
+    }
+    .podium-row.rank-1 { background: #fef3c7; border-color: #f59e0b; }
+    .podium-row.rank-2 { background: #f1f5f9; border-color: #94a3b8; }
+    .podium-row.rank-3 { background: #ffedd5; border-color: #ea580c; }
+  </style>
+</head>
+<body>
+
+  <div id="game-canvas"></div>
+
+  <div id="hud" class="hidden">
+    <div class="hud-pill" id="hud-player">Oyuncu</div>
+    <div class="hud-pill" id="hud-block">Blok: 0 / 13</div>
+  </div>
+
+  <div id="fall-banner" class="hidden">Aşağı düşüyorsun! 3 sn...</div>
+
+  <div id="login-overlay" class="overlay">
+    <div class="card">
+      <h1>Flutter Gökyüzü Parkuru</h1>
+      <p class="sub">Yarışmaya katılmak için bilgilerini gir ve top rengini seç</p>
+
+      <div id="room-status-msg" style="font-size:0.85rem; color:#d97706; font-weight:700; margin-bottom:10px;">
+        Oyun durumu kontrol ediliyor...
+      </div>
+
+      <div class="input-group">
+        <label for="inp-name">İsim</label>
+        <input type="text" id="inp-name" placeholder="Örn: İrem" maxlength="20" />
+      </div>
+      <div class="input-group">
+        <label for="inp-surname">Soyisim</label>
+        <input type="text" id="inp-surname" placeholder="Örn: İmancı" maxlength="20" />
+      </div>
+
+      <div class="input-group">
+        <label>Karakter Rengi (3 Seçenek)</label>
+        <div class="color-options">
+          <button type="button" class="color-btn selected" data-color="kirmizi">
+            <span class="dot"></span>Kırmızı
+          </button>
+          <button type="button" class="color-btn" data-color="mavi">
+            <span class="dot"></span>Mavi
+          </button>
+          <button type="button" class="color-btn" data-color="yesil">
+            <span class="dot"></span>Yeşil
+          </button>
+        </div>
+      </div>
+
+      <button id="btn-join" class="primary-btn">Oyuna Katıl</button>
+    </div>
+  </div>
+
+  <div id="waiting-overlay" class="overlay hidden">
+    <div class="card">
+      <h1>Hazırsın!</h1>
+      <p class="sub" id="waiting-text">Yöneticinin oyunu başlatması bekleniyor...</p>
+      <div style="font-size:0.9rem; color:#2563eb; font-weight:700;" id="player-count-badge">
+        Katılımcı: 1 / 40
+      </div>
+    </div>
+  </div>
+
+  <div id="question-panel" class="hidden">
+    <div class="q-header">
+      <span class="q-badge" id="q-block-label">1. Blok Sorusu</span>
+      <span class="streak-badge" id="q-streak-label">Seri: 0 / 2</span>
+    </div>
+    <div id="q-text">Soru yükleniyor...</div>
+    <div class="options-list" id="q-options"></div>
+  </div>
+
+  <div id="tease-overlay" class="overlay hidden">
+    <div class="card">
+      <h1>2 Doğru Üst Üste!</h1>
+      <p class="sub" id="tease-prompt">Bir arkadaşına sataşmak ister misin?</p>
+
+      <div id="tease-step-1" class="tease-actions">
+        <button id="btn-tease-yes" class="btn-yes">Evet, Sataş!</button>
+        <button id="btn-tease-no" class="btn-no">Hayır, Devam Et</button>
+      </div>
+
+      <div id="tease-step-2" class="hidden">
+        <p style="font-size:0.82rem; color:#475569; margin-bottom:6px;">
+          Dikkat: Arkadaşın arkandaysa o düşer, önündeyse sen düşersin, aynı bloktaysanız etki etmez!
+        </p>
+        <div class="target-list" id="tease-targets"></div>
+        <button id="btn-tease-cancel" class="btn-no" style="width:100%; margin-top:10px;">Vazgeç</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="finish-overlay" class="overlay hidden">
+    <div class="card">
+      <h1 id="finish-title">Bitiş Çizgisine Ulaştın!</h1>
+      <p class="sub" id="finish-subtitle">Diğer oyuncuların tamamlaması bekleniyor...</p>
+      <div id="podium-list"></div>
+    </div>
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script src="questions.js"></script>
+  <script src="game-engine.js"></script>
+  <script>
+    const MAX_PLAYERS = 40;
+    let selectedColor = "kirmizi";
+    let myId = null;
+    let myData = null;
+    let allPlayers = {};
+    let gameState = { status: "waiting", finishOrder: [] };
+    let isPenaltyLocked = false;
+    let isTeaseModalOpen = false;
+
+    const engine = new SkyParkourEngine("game-canvas", { isAdmin: false });
+    const hasFirebase = initFirebase();
+
+    document.querySelectorAll(".color-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".color-btn").forEach((b) => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        selectedColor = btn.dataset.color;
+      });
+    });
+
+    const LOCAL_KEY = "sky_parkour_demo_state";
+    function readLocalState() {
+      try {
+        return JSON.parse(localStorage.getItem(LOCAL_KEY)) || { status: "waiting", players: {}, finishOrder: [] };
+      } catch {
+        return { status: "waiting", players: {}, finishOrder: [] };
+      }
+    }
+    function writeLocalState(st) {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(st));
+      window.dispatchEvent(new Event("storage"));
+    }
+
+    function startListening() {
+      if (hasFirebase) {
+        db.ref("game").on("value", (snap) => {
+          const val = snap.val() || { status: "waiting", players: {}, finishOrder: [] };
+          handleStateUpdate(val);
+        });
+      } else {
+        document.getElementById("room-status-msg").textContent = "Demo Modu Aktif (Firebase bağlandığında 40 telefon online oynar)";
+        handleStateUpdate(readLocalState());
+        window.addEventListener("storage", () => handleStateUpdate(readLocalState()));
+        setInterval(() => handleStateUpdate(readLocalState()), 600);
+      }
+    }
+
+    function handleStateUpdate(val) {
+      gameState = {
+        status: val.status || "waiting",
+        finishOrder: val.finishOrder ? Object.values(val.finishOrder) : []
+      };
+      allPlayers = val.players || {};
+
+      const count = Object.keys(allPlayers).length;
+      if (hasFirebase) {
+        const msgEl = document.getElementById("room-status-msg");
+        if (gameState.status === "waiting") {
+          msgEl.textContent = `Oda Açık • Katılımcı: ${count} / ${MAX_PLAYERS}`;
+          msgEl.style.color = "#16a34a";
+        } else if (gameState.status === "playing") {
+          msgEl.textContent = `Oyun Başladı • Katılımcı: ${count} / ${MAX_PLAYERS}`;
+          msgEl.style.color = "#2563eb";
+        } else {
+          msgEl.textContent = "Oyun Tamamlandı";
+          msgEl.style.color = "#64748b";
+        }
+      }
+
+      document.getElementById("player-count-badge").textContent = `Katılımcı: ${count} / ${MAX_PLAYERS}`;
+      engine.syncPlayers(allPlayers, myId);
+
+      if (!myId || !allPlayers[myId]) return;
+      myData = allPlayers[myId];
+
+      document.getElementById("hud-player").textContent = `${myData.name} ${myData.surname}`;
+      document.getElementById("hud-block").textContent = `Blok: ${myData.block} / 13`;
+
+      if (gameState.status === "waiting") {
+        document.getElementById("waiting-overlay").classList.remove("hidden");
+        document.getElementById("question-panel").classList.add("hidden");
+        document.getElementById("finish-overlay").classList.add("hidden");
+      } else if (gameState.status === "playing") {
+        document.getElementById("waiting-overlay").classList.add("hidden");
+
+        if (myData.block >= 13) {
+          document.getElementById("question-panel").classList.add("hidden");
+          document.getElementById("finish-overlay").classList.remove("hidden");
+          document.getElementById("finish-title").textContent = "Tebrikler, Bitişe Ulaştın!";
+          document.getElementById("finish-subtitle").textContent = "Tüm oyuncular bitiş çizgisine varınca ilk 3 açıklanacak...";
+          renderPodium(false);
+        } else {
+          document.getElementById("finish-overlay").classList.add("hidden");
+          if (!isTeaseModalOpen) {
+            document.getElementById("question-panel").classList.remove("hidden");
+            renderCurrentQuestion();
+          }
+        }
+      } else if (gameState.status === "finished") {
+        document.getElementById("waiting-overlay").classList.add("hidden");
+        document.getElementById("question-panel").classList.add("hidden");
+        document.getElementById("tease-overlay").classList.add("hidden");
+        document.getElementById("finish-overlay").classList.remove("hidden");
+        document.getElementById("finish-title").textContent = "Yarışma Sona Erdi!";
+        document.getElementById("finish-subtitle").textContent = "Bitiş çizgisine ulaşan ilk 3 yarışmacı:";
+        renderPodium(true);
+      }
+    }
+
+    document.getElementById("btn-join").addEventListener("click", async () => {
+      const name = document.getElementById("inp-name").value.trim();
+      const surname = document.getElementById("inp-surname").value.trim();
+
+      if (!name || !surname) {
+        alert("Lütfen isim ve soyisminizi girin.");
+        return;
+      }
+
+      const currentCount = Object.keys(allPlayers).length;
+      if (currentCount >= MAX_PLAYERS) {
+        alert("Üzgünüz, 40 kişilik oyun kontenjanı dolmuştur!");
+        return;
+      }
+
+      const usedSlots = new Set(Object.values(allPlayers).map((p) => p.slot));
+      let assignedSlot = 0;
+      for (let s = 0; s < MAX_PLAYERS; s++) {
+        if (!usedSlots.has(s)) {
+          assignedSlot = s;
+          break;
+        }
+      }
+
+      myId = "player_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      const newPlayer = {
+        id: myId,
+        name,
+        surname,
+        color: selectedColor,
+        block: 0,
+        slot: assignedSlot,
+        streak: 0,
+        finishedAt: null,
+        lastAction: null
+      };
+
+      if (hasFirebase) {
+        await db.ref(`game/players/${myId}`).set(newPlayer);
+      } else {
+        const st = readLocalState();
+        st.players[myId] = newPlayer;
+        writeLocalState(st);
+      }
+
+      document.getElementById("login-overlay").classList.add("hidden");
+      document.getElementById("hud").classList.remove("hidden");
+    });
+
+    let renderedBlock = -1;
+    function renderCurrentQuestion() {
+      if (!myData) return;
+      const qIndex = Math.min(myData.block, GAME_QUESTIONS.length - 1);
+      const qObj = GAME_QUESTIONS[qIndex];
+
+      document.getElementById("q-block-label").textContent = `${qObj.blockIndex}. Blok Sorusu`;
+      document.getElementById("q-streak-label").textContent = `Seri: ${myData.streak || 0} / 2`;
+
+      if (renderedBlock === qIndex && !isPenaltyLocked) return;
+      renderedBlock = qIndex;
+
+      document.getElementById("q-text").textContent = qObj.question;
+      const optContainer = document.getElementById("q-options");
+      optContainer.innerHTML = "";
+
+      qObj.options.forEach((optText, idx) => {
+        const btn = document.createElement("button");
+        btn.className = "opt-btn";
+        btn.textContent = `${["A", "B", "C"][idx]}) ${optText}`;
+        btn.disabled = isPenaltyLocked;
+        btn.addEventListener("click", () => handleAnswer(idx, qObj.correctIndex));
+        optContainer.appendChild(btn);
+      });
+    }
+
+    async function handleAnswer(selectedIndex, correctIndex) {
+      if (isPenaltyLocked || !myData) return;
+
+      if (selectedIndex === correctIndex) {
+        const nextBlock = Math.min(13, (myData.block || 0) + 1);
+        const newStreak = (myData.streak || 0) + 1;
+        renderedBlock = -1;
+
+        const updates = {
+          block: nextBlock,
+          streak: newStreak >= 2 ? 0 : newStreak
+        };
+
+        if (nextBlock === 13) {
+          updates.finishedAt = Date.now();
+        }
+
+        await updatePlayer(myId, updates);
+
+        if (nextBlock === 13) {
+          await checkAllPlayersFinished();
+          return;
+        }
+
+        if (newStreak >= 2) {
+          openTeaseModal();
+        }
+      } else {
+        await updatePlayer(myId, {
+          streak: 0,
+          lastAction: { id: "fall_" + Date.now(), type: "fall" }
+        });
+        triggerFallPenalty(3);
+      }
+    }
+
+    function triggerFallPenalty(seconds) {
+      isPenaltyLocked = true;
+      renderedBlock = -1;
+      renderCurrentQuestion();
+
+      const banner = document.getElementById("fall-banner");
+      banner.classList.remove("hidden");
+      let remaining = seconds;
+      banner.textContent = `Yanlış cevap! Aşağı düştün (${remaining} sn)...`;
+
+      const timer = setInterval(() => {
+        remaining -= 1;
+        if (remaining > 0) {
+          banner.textContent = `Yanlış cevap! Aşağı düştün (${remaining} sn)...`;
+        } else {
+          clearInterval(timer);
+          banner.classList.add("hidden");
+          isPenaltyLocked = false;
+          renderedBlock = -1;
+          renderCurrentQuestion();
+        }
+      }, 1000);
+    }
+
+    function openTeaseModal() {
+      isTeaseModalOpen = true;
+      document.getElementById("question-panel").classList.add("hidden");
+      document.getElementById("tease-overlay").classList.remove("hidden");
+      document.getElementById("tease-step-1").classList.remove("hidden");
+      document.getElementById("tease-step-2").classList.add("hidden");
+    }
+
+    function closeTeaseModal() {
+      isTeaseModalOpen = false;
+      document.getElementById("tease-overlay").classList.add("hidden");
+      if (gameState.status === "playing" && myData && myData.block < 13) {
+        document.getElementById("question-panel").classList.remove("hidden");
+        renderedBlock = -1;
+        renderCurrentQuestion();
+      }
+    }
+
+    document.getElementById("btn-tease-no").addEventListener("click", closeTeaseModal);
+    document.getElementById("btn-tease-cancel").addEventListener("click", closeTeaseModal);
+
+    document.getElementById("btn-tease-yes").addEventListener("click", () => {
+      document.getElementById("tease-step-1").classList.add("hidden");
+      document.getElementById("tease-step-2").classList.remove("hidden");
+
+      const listEl = document.getElementById("tease-targets");
+      listEl.innerHTML = "";
+
+      const others = Object.values(allPlayers).filter((p) => p.id !== myId && p.block < 13);
+      if (others.length === 0) {
+        listEl.innerHTML = `<div style="padding:12px; color:#64748b;">Parkurda sataşabileceğin başka oyuncu kalmadı.</div>`;
+        return;
+      }
+
+      others.forEach((other) => {
+        const item = document.createElement("div");
+        item.className = "target-item";
+        item.innerHTML = `
+          <span>${other.name} ${other.surname}</span>
+          <span style="font-size:0.8rem; color:#475569;">Blok ${other.block}</span>
+        `;
+        item.addEventListener("click", () => executeTease(other));
+        listEl.appendChild(item);
+      });
+    });
+
+    async function executeTease(targetPlayer) {
+      closeTeaseModal();
+      const myBlock = myData.block || 0;
+      const targetBlock = targetPlayer.block || 0;
+
+      await updatePlayer(myId, {
+        lastAction: {
+          id: "push_" + Date.now(),
+          type: "push",
+          targetId: targetPlayer.id
+        }
+      });
+
+      if (targetBlock < myBlock) {
+        await updatePlayer(targetPlayer.id, {
+          lastAction: { id: "fall_" + Date.now(), type: "fall" }
+        });
+      } else if (targetBlock === myBlock) {
+        const banner = document.getElementById("fall-banner");
+        banner.style.background = "#475569";
+        banner.textContent = "Aynı bloktasınız! Sataşma etki etmedi.";
+        banner.classList.remove("hidden");
+        setTimeout(() => {
+          banner.classList.add("hidden");
+          banner.style.background = "#ef4444";
+        }, 2000);
+      } else {
+        await updatePlayer(myId, {
+          lastAction: { id: "fall_" + Date.now(), type: "fall" }
+        });
+        triggerFallPenalty(3);
+      }
+    }
+
+    async function updatePlayer(playerId, partialData) {
+      if (hasFirebase) {
+        await db.ref(`game/players/${playerId}`).update(partialData);
+      } else {
+        const st = readLocalState();
+        if (st.players[playerId]) {
+          st.players[playerId] = { ...st.players[playerId], ...partialData };
+          writeLocalState(st);
+        }
+      }
+    }
+
+    async function checkAllPlayersFinished() {
+      const playersArr = Object.values(allPlayers);
+      if (playersArr.length === 0) return;
+
+      const allDone = playersArr.every((p) => (p.id === myId ? 13 : p.block) >= 13);
+      if (allDone) {
+        const sorted = playersArr
+          .map((p) => (p.id === myId ? { ...p, block: 13, finishedAt: p.finishedAt || Date.now() } : p))
+          .sort((a, b) => (a.finishedAt || Infinity) - (b.finishedAt || Infinity));
+
+        if (hasFirebase) {
+          await db.ref("game").update({ status: "finished", finishOrder: sorted });
+        } else {
+          const st = readLocalState();
+          st.status = "finished";
+          st.finishOrder = sorted;
+          writeLocalState(st);
+        }
+      }
+    }
+
+    function renderPodium(showFullTop3) {
+      const list = document.getElementById("podium-list");
+      list.innerHTML = "";
+
+      const finishedPlayers = Object.values(allPlayers)
+        .filter((p) => p.block >= 13)
+        .sort((a, b) => (a.finishedAt || Infinity) - (b.finishedAt || Infinity));
+
+      const top3 = finishedPlayers.slice(0, 3);
+      if (!showFullTop3) {
+        list.innerHTML = `<div style="font-size:0.9rem; color:#475569;">Şu ana kadar bitiren: ${finishedPlayers.length} / ${Object.keys(allPlayers).length}</div>`;
+        return;
+      }
+
+      const medals = ["1. Sıra", "2. Sıra", "3. Sıra"];
+      top3.forEach((p, idx) => {
+        const row = document.createElement("div");
+        row.className = `podium-row rank-${idx + 1}`;
+        row.innerHTML = `
+          <span>${medals[idx]} — ${p.name} ${p.surname}</span>
+          <span style="font-size:0.8rem; text-transform:uppercase;">${p.color}</span>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    startListening();
+  </script>
+</body>
+</html>

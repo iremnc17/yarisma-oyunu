@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gökyüzü Parkuru - Flutter Yarışması (Yönetici)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #8ecae6; }
+    #admin-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; cursor: pointer; }
+
+    .top-bar {
+      position: fixed; top: 14px; left: 14px; right: 14px; z-index: 10;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      pointer-events: none;
+    }
+    .panel-box {
+      pointer-events: auto;
+      background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(8px);
+      border-radius: 16px; padding: 12px 18px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .title-group h1 { font-size: 1.15rem; color: #0f172a; }
+    .title-group span { font-size: 0.82rem; color: #475569; font-weight: 600; }
+
+    .btn {
+      padding: 10px 18px; border: none; border-radius: 12px; font-weight: 700;
+      font-size: 0.92rem; cursor: pointer; transition: transform 0.15s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-start { background: #16a34a; color: #fff; box-shadow: 0 6px 16px rgba(22, 163, 74, 0.35); }
+    .btn-reset { background: #ef4444; color: #fff; }
+    .btn-qr { background: #2563eb; color: #fff; }
+
+    .question-corner {
+      position: fixed; top: 88px; right: 14px; z-index: 10;
+      width: 380px; max-width: calc(100vw - 28px);
+      background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
+      border-radius: 18px; padding: 18px;
+      box-shadow: 0 14px 35px rgba(15, 23, 42, 0.2);
+      border: 2px solid #bfdbfe;
+    }
+    .qc-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .qc-badge {
+      background: #2563eb; color: #fff; font-weight: 800; font-size: 0.8rem;
+      padding: 4px 10px; border-radius: 999px;
+    }
+    .qc-nav { display: flex; gap: 6px; }
+    .qc-nav button {
+      padding: 4px 10px; border-radius: 8px; border: 1px solid #cbd5e1;
+      background: #f8fafc; font-weight: 700; cursor: pointer;
+    }
+    .qc-question { font-size: 0.98rem; font-weight: 700; color: #0f172a; margin-bottom: 12px; line-height: 1.4; }
+    .qc-options { display: flex; flex-direction: column; gap: 7px; }
+    .qc-opt {
+      padding: 9px 12px; border-radius: 10px; background: #f8fafc;
+      border: 1.5px solid #e2e8f0; font-size: 0.9rem; font-weight: 600; color: #1e293b;
+    }
+    .qc-opt.correct { background: #dcfce7; border-color: #22c55e; color: #14532d; }
+
+    .qr-corner {
+      position: fixed; bottom: 14px; left: 14px; z-index: 10;
+      background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px);
+      border-radius: 18px; padding: 14px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+      display: flex; align-items: center; gap: 14px;
+    }
+    #qrcode { background: #fff; padding: 6px; border-radius: 10px; border: 1px solid #e2e8f0; }
+    .qr-info h3 { font-size: 0.95rem; color: #0f172a; margin-bottom: 4px; }
+    .qr-info p { font-size: 0.78rem; color: #475569; max-width: 190px; line-height: 1.35; }
+    .hint-pill {
+      position: fixed; bottom: 14px; right: 14px; z-index: 10;
+      background: rgba(15, 23, 42, 0.82); color: #fff;
+      padding: 10px 16px; border-radius: 999px; font-size: 0.84rem; font-weight: 600;
+    }
+
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 30;
+      background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hidden { display: none !important; }
+    .podium-card {
+      background: #fff; border-radius: 24px; padding: 28px; width: 440px; max-width: 92vw;
+      text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+    }
+    .podium-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 16px; border-radius: 14px; margin-top: 10px; font-weight: 800; font-size: 1.05rem;
+    }
+    .p1 { background: #fef3c7; border: 2px solid #f59e0b; color: #92400e; }
+    .p2 { background: #f1f5f9; border: 2px solid #94a3b8; color: #1e293b; }
+    .p3 { background: #ffedd5; border: 2px solid #ea580c; color: #7c2d12; }
+  </style>
+</head>
+<body>
+
+  <div id="admin-canvas"></div>
+
+  <div class="top-bar">
+    <div class="panel-box">
+      <div class="title-group">
+        <h1>Flutter Gökyüzü Parkuru — Yönetici Ekranı</h1>
+        <span id="admin-status">Katılımcı: 0 / 40 • Durum: Bekleniyor</span>
+      </div>
+    </div>
+
+    <div class="panel-box">
+      <button id="btn-start-game" class="btn btn-start">Oyunu Başlat</button>
+      <button id="btn-toggle-qr" class="btn btn-qr">QR Kodu Gizle/Göster</button>
+      <button id="btn-reset-game" class="btn btn-reset">Odayı Sıfırla</button>
+    </div>
+  </div>
+
+  <div class="question-corner">
+    <div class="qc-header">
+      <span class="qc-badge" id="qc-block-title">Başlangıç Bloğu (0)</span>
+      <div class="qc-nav">
+        <button id="btn-prev-block" title="Önceki Blok">◀</button>
+        <button id="btn-next-block" title="Sonraki Blok">▶</button>
+      </div>
+    </div>
+    <div class="qc-question" id="qc-question-text">
+      Oyuncuların katılması bekleniyor. Flutter sorularını görmek için sahnedeki beyaz bloklara tıklayın.
+    </div>
+    <div class="qc-options" id="qc-options-list"></div>
+  </div>
+
+  <div class="qr-corner" id="qr-box">
+    <div id="qrcode"></div>
+    <div class="qr-info">
+      <h3>Oyuncu Giriş QR Kodu</h3>
+      <p>Öğrenciler telefon kamerasıyla okutup isim, soyisim ve top rengini seçerek katılır.</p>
+      <p id="player-url-text" style="margin-top:4px; font-weight:700; color:#2563eb; word-break:break-all;"></p>
+    </div>
+  </div>
+
+  <div class="hint-pill">
+    İpucu: Sahnedeki herhangi bir beyaz bloğa tıklayarak kamerayı o bloğa ilerletebilir ve Flutter sorusunu görebilirsiniz.
+  </div>
+
+  <div id="admin-podium-modal" class="modal-overlay hidden">
+    <div class="podium-card">
+      <h2 style="font-size:1.5rem; color:#0f172a; margin-bottom:6px;">Yarışma Tamamlandı!</h2>
+      <p style="color:#64748b; font-size:0.92rem; margin-bottom:14px;">Bitiş çizgisine ulaşan ilk 3 yarışmacı:</p>
+      <div id="admin-podium-list"></div>
+      <button id="btn-close-podium" class="btn btn-qr" style="width:100%; margin-top:18px;">Sahneye Dön</button>
+    </div>
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script src="questions.js"></script>
+  <script src="game-engine.js"></script>
+  <script>
+    const hasFirebase = initFirebase();
+    let currentFocusBlock = 0;
+
+    const engine = new SkyParkourEngine("admin-canvas", {
+      isAdmin: true,
+      onBlockClick: (blockIndex) => {
+        selectAdminBlock(blockIndex);
+      }
+    });
+
+    const playerUrl = window.location.href.replace(/admin\.html.*$/, "index.html");
+    document.getElementById("player-url-text").textContent = playerUrl;
+    new QRCode(document.getElementById("qrcode"), {
+      text: playerUrl,
+      width: 112,
+      height: 112,
+      colorDark: "#0f172a",
+      colorLight: "#ffffff"
+    });
+
+    document.getElementById("btn-toggle-qr").addEventListener("click", () => {
+      document.getElementById("qr-box").classList.toggle("hidden");
+    });
+
+    function selectAdminBlock(blockIndex) {
+      currentFocusBlock = Math.max(0, Math.min(13, blockIndex));
+      engine.setAdminFocusBlock(currentFocusBlock);
+
+      const titleEl = document.getElementById("qc-block-title");
+      const qTextEl = document.getElementById("qc-question-text");
+      const optListEl = document.getElementById("qc-options-list");
+      optListEl.innerHTML = "";
+
+      if (currentFocusBlock === 0) {
+        titleEl.textContent = "Başlangıç Platformu (Blok 0)";
+        qTextEl.textContent = "Yarışmacılar bu platformda toplanır. 1. Flutter sorusunu görmek için 1. bloğa tıklayın.";
+      } else if (currentFocusBlock === 13) {
+        titleEl.textContent = "Bitiş Platformu (Blok 13)";
+        qTextEl.textContent = "Tüm soruları tamamlayan yarışmacılar bitiş çizgisine burada ulaşır.";
+      } else {
+        const qObj = GAME_QUESTIONS[currentFocusBlock - 1];
+        titleEl.textContent = `${qObj.blockIndex}. Blok Sorusu`;
+        qTextEl.textContent = qObj.question;
+
+        qObj.options.forEach((opt, idx) => {
+          const div = document.createElement("div");
+          div.className = "qc-opt" + (idx === qObj.correctIndex ? " correct" : "");
+          div.textContent = `${["A", "B", "C"][idx]}) ${opt}` + (idx === qObj.correctIndex ? " ✓" : "");
+          optListEl.appendChild(div);
+        });
+      }
+    }
+
+    document.getElementById("btn-prev-block").addEventListener("click", () => {
+      selectAdminBlock(currentFocusBlock - 1);
+    });
+    document.getElementById("btn-next-block").addEventListener("click", () => {
+      selectAdminBlock(currentFocusBlock + 1);
+    });
+
+    const LOCAL_KEY = "sky_parkour_demo_state";
+    function readLocalState() {
+      try {
+        return JSON.parse(localStorage.getItem(LOCAL_KEY)) || { status: "waiting", players: {}, finishOrder: [] };
+      } catch {
+        return { status: "waiting", players: {}, finishOrder: [] };
+      }
+    }
+    function writeLocalState(st) {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(st));
+      window.dispatchEvent(new Event("storage"));
+    }
+
+    document.getElementById("btn-start-game").addEventListener("click", async () => {
+      if (hasFirebase) {
+        await db.ref("game/status").set("playing");
+      } else {
+        const st = readLocalState();
+        st.status = "playing";
+        writeLocalState(st);
+      }
+      selectAdminBlock(1);
+    });
+
+    document.getElementById("btn-reset-game").addEventListener("click", async () => {
+      if (!confirm("Tüm oyuncular silinecek ve oyun başa alınacak. Onaylıyor musunuz?")) return;
+      if (hasFirebase) {
+        await db.ref("game").set({ status: "waiting", players: null, finishOrder: null });
+      } else {
+        writeLocalState({ status: "waiting", players: {}, finishOrder: [] });
+      }
+      document.getElementById("admin-podium-modal").classList.add("hidden");
+      selectAdminBlock(0);
+    });
+
+    document.getElementById("btn-close-podium").addEventListener("click", () => {
+      document.getElementById("admin-podium-modal").classList.add("hidden");
+    });
+
+    function renderAdminState(val) {
+      const status = val.status || "waiting";
+      const players = val.players || {};
+      const count = Object.keys(players).length;
+
+      const statusText = status === "waiting" ? "Bekleniyor" : status === "playing" ? "Oynanıyor" : "Tamamlandı";
+      document.getElementById("admin-status").textContent = `Katılımcı: ${count} / 40 • Durum: ${statusText}`;
+
+      engine.syncPlayers(players, null);
+
+      if (status === "finished") {
+        const sorted = Object.values(players)
+          .filter((p) => p.block >= 13)
+          .sort((a, b) => (a.finishedAt || Infinity) - (b.finishedAt || Infinity))
+          .slice(0, 3);
+
+        const listEl = document.getElementById("admin-podium-list");
+        listEl.innerHTML = "";
+        const medals = ["1. Sıra", "2. Sıra", "3. Sıra"];
+        sorted.forEach((p, idx) => {
+          const item = document.createElement("div");
+          item.className = `podium-item p${idx + 1}`;
+          item.innerHTML = `<span>${medals[idx]} — ${p.name} ${p.surname}</span><span>${p.color.toUpperCase()}</span>`;
+          listEl.appendChild(item);
+        });
+        document.getElementById("admin-podium-modal").classList.remove("hidden");
+      }
+    }
+
+    if (hasFirebase) {
+      db.ref("game").on("value", (snap) => {
+        renderAdminState(snap.val() || {});
+      });
+    } else {
+      renderAdminState(readLocalState());
+      window.addEventListener("storage", () => renderAdminState(readLocalState()));
+      setInterval(() => renderAdminState(readLocalState()), 600);
+    }
+  </script>
+</body>
+</html>

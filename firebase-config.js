@@ -13,7 +13,7 @@ let db = null;
 let isDemoMode = false;
 
 function initFirebase() {
-  if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === "BURAYA_API_KEY_YAZIN") {
+  if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "AIzaSyCCXIuHcIZLF6UAE_S38H82KjCcCdxuKxM") {
     console.warn("Firebase yapılandırılmamış! Demo (Yerel Tarayıcı) modu aktif ediliyor.");
     isDemoMode = true;
     return false;
